@@ -9,6 +9,7 @@ interface DateSelectorProps {
 export default function DateSelector({ onDateChange }: DateSelectorProps) {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [activePreset, setActivePreset] = useState<number | null>(0);
 
     // 날짜 포맷팅 (YYYY-MM-DD)
     const formatDate = (date: Date) => {
@@ -19,6 +20,7 @@ export default function DateSelector({ onDateChange }: DateSelectorProps) {
     };
 
     const handlePreset = (days: number) => {
+        setActivePreset(days);
         const end = new Date();
         const start = new Date();
 
@@ -42,11 +44,9 @@ export default function DateSelector({ onDateChange }: DateSelectorProps) {
     };
 
     const handleCustomChange = (type: 'start' | 'end', value: string) => {
+        setActivePreset(null);
         if (type === 'start') {
             setStartDate(value);
-            if (endDate && value > endDate) {
-                // 시작일이 종료일보다 늦으면 종료일 초기화 혹은 경고? 일단 둠
-            }
             onDateChange(value, endDate);
         } else {
             setEndDate(value);
@@ -59,27 +59,34 @@ export default function DateSelector({ onDateChange }: DateSelectorProps) {
         handlePreset(0);
     }, []);
 
+    const presetButtonClass = (days: number) => `
+        px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200
+        ${activePreset === days
+            ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300'}
+    `;
+
     return (
-        <div className="flex flex-col gap-2">
-            <div className="flex gap-1">
-                <button onClick={() => handlePreset(0)} className="px-2 py-1 text-xs border rounded hover:bg-gray-100">오늘</button>
-                <button onClick={() => handlePreset(1)} className="px-2 py-1 text-xs border rounded hover:bg-gray-100">어제</button>
-                <button onClick={() => handlePreset(7)} className="px-2 py-1 text-xs border rounded hover:bg-gray-100">1주일</button>
-                <button onClick={() => handlePreset(30)} className="px-2 py-1 text-xs border rounded hover:bg-gray-100">1달</button>
+        <div className="flex flex-col gap-3 w-full md:w-auto">
+            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
+                <button onClick={() => handlePreset(0)} className={presetButtonClass(0)}>오늘</button>
+                <button onClick={() => handlePreset(1)} className={presetButtonClass(1)}>어제</button>
+                <button onClick={() => handlePreset(7)} className={presetButtonClass(7)}>1주일</button>
+                <button onClick={() => handlePreset(30)} className={presetButtonClass(30)}>1달</button>
             </div>
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
                 <input
                     type="date"
                     value={startDate}
                     onChange={(e) => handleCustomChange('start', e.target.value)}
-                    className="border rounded px-2 py-1 text-xs"
+                    className="bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
                 />
-                <span className="text-gray-400">~</span>
+                <span className="text-gray-400 text-xs">~</span>
                 <input
                     type="date"
                     value={endDate}
                     onChange={(e) => handleCustomChange('end', e.target.value)}
-                    className="border rounded px-2 py-1 text-xs"
+                    className="bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
                 />
             </div>
         </div>
