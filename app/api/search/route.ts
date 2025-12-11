@@ -53,7 +53,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
         }
 
-        const { regionCode, ymd, propertyType = 'APT' } = body; // Default to APT
+        const { regionCode, ymd, propertyType = 'SH' } = body; // Default to SH
 
         if (!regionCode || !ymd) {
             return NextResponse.json({ success: false, error: 'Region Code and YMD are required' }, { status: 400 });
@@ -62,14 +62,25 @@ export async function POST(request: Request) {
         const RAW_SERVICE_KEY = process.env.NEXT_PUBLIC_API_KEY_MOLIT || '';
 
         let url = '';
-        if (propertyType === 'APT') {
-            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
-        } else if (propertyType === 'OFFICE') {
+        let serviceId = '';
+
+        // 4가지 유형 지원
+        if (propertyType === 'SH') { // 단독/다가구
+            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSHTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+            serviceId = 'SH';
+        } else if (propertyType === 'OFFICE') { // 상업/업무용
             url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcNrgTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
-        } else if (propertyType === 'VILLA') {
-            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+            serviceId = 'OFFICE';
+        } else if (propertyType === 'FACTORY') { // 공장/창고
+            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcInduTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+            serviceId = 'FACTORY';
+        } else if (propertyType === 'LAND') { // 토지
+            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcLandTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+            serviceId = 'LAND';
         } else {
-            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+            // Default to SH
+            url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSHTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+            serviceId = 'SH';
         }
 
         console.log(`Fetching trade data from: ${url} (Type: ${propertyType})`);
@@ -97,7 +108,6 @@ export async function POST(request: Request) {
             const resultMsg = parsedData.response?.header?.resultMsg;
             const resultCode = parsedData.response?.header?.resultCode;
             console.error("API Error Result Code:", resultCode, resultMsg);
-            // 에러 메시지를 클라이언트에 전달
             return NextResponse.json({ success: false, error: `API Error (${resultCode}): ${resultMsg}` }, { status: 200 });
         }
 
@@ -112,23 +122,31 @@ export async function POST(request: Request) {
         // 2. 매칭 및 검증 로직
         const results: MatchResult[] = await Promise.all(items.map(async (item: any, idx: number) => {
             try {
-                // 아파트/상업용/연립다세대 필드 매핑 차이 처리
                 const dong = item['법정동']?.trim();
                 const jibun = item['지번']?.trim();
 
-                // 아파트는 '아파트', 상업용은 '건물명', 연립은 '연립다세대' 등 필드명이 다를 수 있음
-                // 공통 필드 위주로 매핑
+                let landArea = 0;
+                let buildArea = 0;
+
+                // 필드 매핑
+                if (serviceId === 'LAND') {
+                    landArea = parseFloat(item['거래면적'] || '0');
+                    buildArea = 0; // 토지는 건물 면적 없음
+                } else {
+                    landArea = parseFloat(item['대지면적'] || item['대지권면적'] || '0');
+                    buildArea = parseFloat(item['연면적'] || item['전용면적'] || item['건물면적'] || '0');
+                }
+
                 const trade: TradeData = {
                     dealAmount: item['거래금액']?.trim() || '0',
                     dealYear: item['년']?.toString(),
                     dealMonth: item['월']?.toString().padStart(2, '0'),
                     dealDay: item['일']?.toString().padStart(2, '0'),
                     dong: dong,
-                    // 아파트는 대지면적이 없을 수 있음 -> 전용면적을 buildArea로 매핑
-                    landArea: parseFloat(item['대지면적'] || item['대지권면적'] || '0'),
-                    buildArea: parseFloat(item['연면적'] || item['전용면적'] || '0'),
+                    landArea: landArea,
+                    buildArea: buildArea,
                     jibun: jibun,
-                    buildingUse: item['건물주용도'] || item['아파트'] || item['연립다세대'], // 용도 혹은 건물명
+                    buildingUse: item['건물주용도'] || item['용도지역'] || (serviceId === 'LAND' ? '토지' : ''),
                     jimok: item['지목'],
                     zoning: item['용도지역'],
                     constructionYear: item['건축년도']?.toString()
@@ -153,16 +171,13 @@ export async function POST(request: Request) {
                     if (buildings.length > 0) {
                         const match = buildings.find((b: any) => {
                             const bLand = parseFloat(b['platArea']);
-                            const bBuild = parseFloat(b['totArea']); // 연면적
-                            const bExcl = parseFloat(b['archArea']); // 건축면적? 전용면적은 대장에 따라 다름 (totArea가 연면적)
-
-                            // 아파트의 경우 전용면적 비교가 중요하지만, 건축물대장 표제부(TitleInfo)에는 전용면적 상세가 없을 수 있음 (전유부 필요)
-                            // 일단 표제부 연면적 vs 거래 연면적(전용) 비교는 오차가 클 수 있음.
-                            // 데모용으로 간단한 로직 유지하되, 오차 범위 완화
+                            const bBuild = parseFloat(b['totArea']);
 
                             const landMatch = Math.abs(bLand - trade.landArea) < 1.0;
-                            const buildMatch = Math.abs(bBuild - trade.buildArea) < 30.0; // 오차 범위 30으로 완화 (공용면적 포함 여부 등 차이)
-                            return landMatch || buildMatch;
+                            // 토지는 건물 면적 비교 제외
+                            const buildMatch = serviceId === 'LAND' ? true : Math.abs(bBuild - trade.buildArea) < 30.0;
+
+                            return landMatch && buildMatch;
                         });
 
                         if (match) {
@@ -170,7 +185,7 @@ export async function POST(request: Request) {
                             matchedAddress = [`${match['platPlc']}`];
                             similarity = {
                                 land: Math.abs(parseFloat(match['platArea']) - trade.landArea) < 1.0,
-                                building: Math.abs(parseFloat(match['totArea']) - trade.buildArea) < 30.0,
+                                building: serviceId === 'LAND' ? true : Math.abs(parseFloat(match['totArea']) - trade.buildArea) < 30.0,
                                 zoning: true
                             };
                         } else {
@@ -206,7 +221,6 @@ export async function POST(request: Request) {
 
     } catch (error) {
         console.error("Search API Critical Error:", error);
-        // 절대 500을 반환하지 않고 빈 데이터를 반환하여 프론트엔드 크래시 방지
         return NextResponse.json({ success: false, error: 'Internal Server Error Handled' }, { status: 200 });
     }
 }

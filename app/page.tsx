@@ -15,7 +15,7 @@ export default function Home() {
   // 검색 파라미터 상태
   const [regionCode, setRegionCode] = useState('11680'); // 강남구 기본값
   const [searchDate, setSearchDate] = useState({ start: '', end: '' });
-  const [propertyType, setPropertyType] = useState('APT'); // APT, OFFICE, VILLA
+  const [propertyType, setPropertyType] = useState('SH'); // SH, OFFICE, FACTORY, LAND
 
   const handleSearch = async () => {
     if (!searchDate.start || !searchDate.end) {
@@ -121,9 +121,10 @@ export default function Home() {
               onChange={(e) => setPropertyType(e.target.value)}
               className="border rounded-lg px-3 py-2 text-sm font-medium text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 md:flex-none"
             >
-              <option value="APT">아파트</option>
+              <option value="SH">단독/다가구</option>
               <option value="OFFICE">상업/업무용</option>
-              <option value="VILLA">연립/다세대</option>
+              <option value="FACTORY">공장/창고</option>
+              <option value="LAND">토지</option>
             </select>
             <RegionSelector onRegionChange={(code, dong) => {
               setRegionCode(code);
