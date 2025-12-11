@@ -3,8 +3,6 @@ import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import { MatchResult, TradeData } from '@/types';
 
-const SERVICE_KEY = decodeURIComponent(process.env.NEXT_PUBLIC_API_KEY_MOLIT || '');
-
 // XML Parser 설정
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -25,7 +23,7 @@ async function fetchBuildingLedger(sigunguCd: string, bjdongCd: string, bun: str
     try {
         const response = await axios.get(url, {
             params: {
-                serviceKey: SERVICE_KEY,
+                serviceKey: process.env.NEXT_PUBLIC_API_KEY_MOLIT, // 여기서는 axios가 인코딩하도록 둠 (일반적으로 디코딩된 키 사용 권장되나, 상황에 따라 다름)
                 sigunguCd: sigunguCd,
                 bjdongCd: bjdongCd,
                 bun: bun.padStart(4, '0'),
@@ -54,15 +52,19 @@ export async function POST(request: Request) {
         }
 
         // 1. 실거래가 API 호출
-        const url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcNrgTrade`;
+        // Axios는 params에 객체를 전달하면 기본적으로 인코딩을 수행합니다.
+        // 공공데이터포털 키가 이미 인코딩된 상태라면, 이중 인코딩을 방지하기 위해
+        // 서비스 키를 URL에 직접 붙이거나, 인터셉터를 사용해야 합니다.
 
-        const response = await axios.get(url, {
-            params: {
-                serviceKey: SERVICE_KEY,
-                LAWD_CD: regionCode,
-                DEAL_YMD: ymd,
-            }
-        });
+        const RAW_SERVICE_KEY = process.env.NEXT_PUBLIC_API_KEY_MOLIT || '';
+        // 주의: 사용자가 제공한 키가 이미 인코딩된 값(%2F...)이라면 그대로 사용해야 합니다.
+        // 따라서 decodeURIComponent를 사용하지 않고 원본 값을 쿼리 스트링에 넣습니다.
+
+        const url = `http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcNrgTrade?serviceKey=${RAW_SERVICE_KEY}&LAWD_CD=${regionCode}&DEAL_YMD=${ymd}`;
+
+        console.log(`Fetching trade data from: ${url}`);
+
+        const response = await axios.get(url);
 
         const parsedData = parser.parse(response.data);
 

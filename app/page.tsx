@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import MapViewer from '@/components/MapViewer';
+import RegionSelector from '@/components/RegionSelector';
 import { MatchResult } from '@/types';
 
 export default function Home() {
@@ -44,11 +45,11 @@ export default function Home() {
             🕵️‍♂️ 부동산 탐정 <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Beta</span>
           </h1>
         </div>
-        <div className="flex gap-2">
-          <input
-            type="text" value={regionCode} onChange={(e) => setRegionCode(e.target.value)}
-            className="border rounded px-3 py-2 text-sm w-24" placeholder="지역코드"
-          />
+        <div className="flex gap-2 items-center">
+          <RegionSelector onRegionChange={(code, dong) => {
+            setRegionCode(code);
+            console.log("Selected:", code, dong);
+          }} />
           <input
             type="text" value={ymd} onChange={(e) => setYmd(e.target.value)}
             className="border rounded px-3 py-2 text-sm w-24" placeholder="YYYYMM"
@@ -75,8 +76,8 @@ export default function Home() {
                 key={item.id}
                 onClick={() => setSelectedAddress(item.matchedAddress[0])}
                 className={`group cursor-pointer p-4 rounded-xl border transition-all duration-200 hover:shadow-md ${selectedAddress === item.matchedAddress[0]
-                    ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
-                    : 'border-gray-200 bg-white'
+                  ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                  : 'border-gray-200 bg-white'
                   }`}
               >
                 {/* Status Badge */}
