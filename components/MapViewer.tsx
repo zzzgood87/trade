@@ -19,10 +19,10 @@ export default function MapViewer({ address }: MapViewerProps) {
 
     useEffect(() => {
         if (!window.kakao || !window.kakao.maps) {
-            console.error("Kakao Maps SDK not loaded");
             return;
         }
 
+        // SDK 로드 완료 대기
         window.kakao.maps.load(() => {
             // 1. 지도 초기화 (최초 1회)
             if (!mapInstance.current && mapContainer.current) {
