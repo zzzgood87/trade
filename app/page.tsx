@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import MapViewer from '@/components/MapViewer';
 import RegionSelector from '@/components/RegionSelector';
+import DateSelector from '@/components/DateSelector';
 import { MatchResult } from '@/types';
 
 export default function Home() {
@@ -12,24 +13,74 @@ export default function Home() {
 
   // 검색 파라미터 상태
   const [regionCode, setRegionCode] = useState('11680'); // 강남구 기본값
-  const [ymd, setYmd] = useState('202405');
+  const [searchDate, setSearchDate] = useState({ start: '', end: '' });
 
   const handleSearch = async () => {
+    if (!searchDate.start || !searchDate.end) {
+      alert('날짜를 선택해주세요.');
+      return;
+    }
+
     setLoading(true);
     setResults([]);
     setSelectedAddress('');
 
     try {
-      const res = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regionCode, ymd }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setResults(json.data);
+      // 1. 기간 내의 모든 'YYYYMM' 추출
+      const start = new Date(searchDate.start);
+      const end = new Date(searchDate.end);
+      const months = new Set<string>();
+
+      let current = new Date(start);
+      // 날짜 루프: 시작일부터 종료일까지 월 단위로 추가
+      while (current <= end) {
+        const yyyy = current.getFullYear();
+        const mm = String(current.getMonth() + 1).padStart(2, '0');
+        months.add(`${yyyy}${mm}`);
+        current.setMonth(current.getMonth() + 1);
+        current.setDate(1); // 다음 달 1일로 설정하여 루프 진행
       }
+      // 종료일이 속한 달도 확실히 포함
+      const endYyyy = end.getFullYear();
+      const endMm = String(end.getMonth() + 1).padStart(2, '0');
+      months.add(`${endYyyy}${endMm}`);
+
+      // 2. 각 월별로 API 호출 (병렬 처리)
+      const promises = Array.from(months).map(ymd =>
+        fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ regionCode, ymd }),
+        }).then(res => res.json())
+      );
+
+      const responses = await Promise.all(promises);
+
+      // 3. 결과 합치기 및 날짜 필터링
+      let allResults: MatchResult[] = [];
+      responses.forEach(json => {
+        if (json.success && json.data) {
+          allResults = [...allResults, ...json.data];
+        }
+      });
+
+      // 날짜 필터링 (YYYY-MM-DD 문자열 비교)
+      const filtered = allResults.filter(item => {
+        const dealDate = `${item.tradeData.dealYear}-${item.tradeData.dealMonth}-${item.tradeData.dealDay}`;
+        return dealDate >= searchDate.start && dealDate <= searchDate.end;
+      });
+
+      // 최신순 정렬
+      filtered.sort((a, b) => {
+        const dateA = `${a.tradeData.dealYear}${a.tradeData.dealMonth}${a.tradeData.dealDay}`;
+        const dateB = `${b.tradeData.dealYear}${b.tradeData.dealMonth}${b.tradeData.dealDay}`;
+        return dateB.localeCompare(dateA);
+      });
+
+      setResults(filtered);
+
     } catch (error) {
+      console.error(error);
       alert('데이터를 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -45,18 +96,17 @@ export default function Home() {
             🕵️‍♂️ 부동산 탐정 <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Beta</span>
           </h1>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-4 items-center">
           <RegionSelector onRegionChange={(code, dong) => {
             setRegionCode(code);
             console.log("Selected:", code, dong);
           }} />
-          <input
-            type="text" value={ymd} onChange={(e) => setYmd(e.target.value)}
-            className="border rounded px-3 py-2 text-sm w-24" placeholder="YYYYMM"
-          />
+          <DateSelector onDateChange={(start, end) => {
+            setSearchDate({ start, end });
+          }} />
           <button
             onClick={handleSearch} disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition disabled:bg-gray-400"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition disabled:bg-gray-400 h-fit"
           >
             {loading ? '분석 중...' : '조회하기'}
           </button>
